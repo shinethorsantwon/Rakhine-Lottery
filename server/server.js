@@ -863,7 +863,8 @@ app.listen(PORT, '0.0.0.0', () => {
 });
 
 // SPA Fallback: Serve index.html for unknown routes
-app.get('*', (req, res) => {
+// SPA Fallback: Serve index.html for unknown routes
+app.get(/(.*)/, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
