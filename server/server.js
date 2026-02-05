@@ -596,6 +596,43 @@ app.post('/api/admin/adjust-balance', checkDB, authenticateToken, isAdmin, (req,
 });
 
 // Delete Transaction (Admin)
+// Request Transaction (Deposit/Withdrawal) - User
+app.post('/api/request-transaction', checkDB, authenticateToken, upload.single('proofImage'), (req, res) => {
+    const { amount, type, method, note, withdrawInfo } = req.body;
+    const userId = req.user.id;
+    let finalNote = note || '';
+    if (withdrawInfo) {
+        const wInfo = JSON.parse(withdrawInfo);
+        finalNote = `Name: ${wInfo.name}, Phone: ${wInfo.phone}`;
+    }
+
+    const proofImage = req.file ? req.file.path : null;
+
+    if (!amount || isNaN(amount) || amount <= 0) return res.status(400).json({ message: 'Invalid amount' });
+
+    // For withdrawals, check balance immediately? (Optional, but good UX)
+    if (type === 'withdrawal') {
+        db.query('SELECT balance, wonBalance FROM users WHERE id = ?', [userId], (err, results) => {
+            if (err) return res.status(500).json({ message: 'DB Error' });
+            const user = results[0];
+            const available = parseFloat(user.balance) + parseFloat(user.wonBalance);
+            if (available < amount) return res.status(400).json({ message: 'Insufficient funds' });
+
+            insertTransaction();
+        });
+    } else {
+        insertTransaction();
+    }
+
+    function insertTransaction() {
+        const query = 'INSERT INTO transactions (userId, type, amount, status, method, note, proofImage) VALUES (?, ?, ?, "pending", ?, ?, ?)';
+        db.query(query, [userId, type, amount, method, finalNote, proofImage], (err) => {
+            if (err) return res.status(500).json({ message: 'Transaction request failed', error: err });
+            res.json({ message: 'Transaction submitted successfully' });
+        });
+    }
+});
+
 // Delete Transaction (Admin) - with Photo Cleanup
 app.delete('/api/admin/transaction/:id', checkDB, authenticateToken, isAdmin, (req, res) => {
     // First get the image path

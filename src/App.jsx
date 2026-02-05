@@ -366,7 +366,7 @@ function App() {
     }
     const token = localStorage.getItem('token');
     try {
-      const response = await fetch('/api/request-transaction', {
+      const response = await fetch(`${API_URL}/api/request-transaction`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
@@ -412,7 +412,7 @@ function App() {
         setIsDrawing(false);
         const data = await response.json();
         if (response.ok) {
-          const totalAmountForDraw = totalTicketsSold * TICKET_PRICE;
+          const totalAmountForDraw = totalTicketsSold * ticketPrice;
           const adminFeeForDraw = totalAmountForDraw * 0.10;
           const currentPrizePool = totalAmountForDraw - adminFeeForDraw;
           const winners = data.winners.map((w, index) => ({
@@ -440,7 +440,7 @@ function App() {
 
   const handleBulkBuy = async () => {
     const token = localStorage.getItem('token');
-    const totalCost = ticketQuantity * TICKET_PRICE;
+    const totalCost = ticketQuantity * ticketPrice;
     if ((balance + wonBalance) < totalCost) {
       setSuccessMessage('Insufficient combined balance! Please deposit to top up.');
       setShowSuccessModal(true);
@@ -827,7 +827,7 @@ function App() {
                   <button className="qty-btn" onClick={() => setTicketQuantity(ticketQuantity + 1)}>+</button>
                 </div>
                 <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-                  <h3 style={{ color: 'var(--secondary)' }}>{(ticketQuantity * TICKET_PRICE).toLocaleString()} MMK</h3>
+                  <h3 style={{ color: 'var(--secondary)' }}>{(ticketQuantity * ticketPrice).toLocaleString()} MMK</h3>
                 </div>
                 <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
                   <button className="buy-btn" onClick={handleBulkBuy} style={{ flex: 1 }}>Confirm</button>
