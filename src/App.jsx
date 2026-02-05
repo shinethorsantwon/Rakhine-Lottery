@@ -206,21 +206,7 @@ function App() {
     };
   }, []);
 
-  // Dynamic Favicon
-  useEffect(() => {
-    const link = document.querySelector("link[rel~='icon']");
-    if (!link) {
-      const newLink = document.createElement('link');
-      newLink.rel = 'icon';
-      document.head.appendChild(newLink);
-    }
-    const currentLink = document.querySelector("link[rel~='icon']");
-    if (user?.profileImage) {
-      currentLink.href = `${API_URL}/${user.profileImage}`;
-    } else {
-      currentLink.href = logo;
-    }
-  }, [user]);
+  // Removed Dynamic Favicon logic to keep logo.ico as requested
 
   useEffect(() => {
     // Force Hide Scrollbar via JS Injection
