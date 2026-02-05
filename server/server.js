@@ -260,7 +260,13 @@ const checkDB = (req, res, next) => {
 
 // Signup Route
 app.post('/api/signup', checkDB, async (req, res) => {
-    const { displayName, username, email, phone, password } = req.body;
+    const { displayName, email, phone, password } = req.body;
+    let { username } = req.body;
+
+    // Auto-generate username if not provided
+    if (!username) {
+        username = `user_${Math.floor(100000 + Math.random() * 900000)}`;
+    }
 
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -269,11 +275,11 @@ app.post('/api/signup', checkDB, async (req, res) => {
         db.query(query, [displayName, username, email, phone, hashedPassword], (err, result) => {
             if (err) {
                 if (err.code === 'ER_DUP_ENTRY') {
-                    return res.status(400).json({ message: 'Username or Email already exists' });
+                    return res.status(400).json({ message: 'Email or Username already exists' });
                 }
                 return res.status(500).json({ message: 'Database error', error: err });
             }
-            res.status(201).json({ message: 'User registered successfully' });
+            res.status(201).json({ message: 'User registered successfully! Your username is: ' + username });
         });
     } catch (error) {
         console.error('Signup error:', error);

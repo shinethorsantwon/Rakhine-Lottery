@@ -16,7 +16,6 @@ const Auth = ({ onLogin, ticketPrice = 1000, prizes = { prize1: 0, prize2: 0, pr
     const [isLogin, setIsLogin] = useState(true);
     const [formData, setFormData] = useState({
         displayName: '',
-        username: '',
         email: '',
         phone: '',
         password: ''
@@ -118,10 +117,6 @@ const Auth = ({ onLogin, ticketPrice = 1000, prizes = { prize1: 0, prize2: 0, pr
                                 <div style={{ position: 'relative' }}>
                                     <div style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}><Icons.User /></div>
                                     <input type="text" name="displayName" className="auth-input" placeholder="Full Name" value={formData.displayName} onChange={handleChange} required style={{ paddingLeft: '50px' }} />
-                                </div>
-                                <div style={{ position: 'relative' }}>
-                                    <div style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}><Icons.User /></div>
-                                    <input type="text" name="username" className="auth-input" placeholder="Username" value={formData.username} onChange={handleChange} required style={{ paddingLeft: '50px' }} />
                                 </div>
                                 <div style={{ position: 'relative' }}>
                                     <div style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}><Icons.Phone /></div>
