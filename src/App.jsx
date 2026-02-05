@@ -481,7 +481,7 @@ function App() {
   return (
     <div className="container">
       {user && (
-        <header className="app-header" style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '10px' }}>
+        <header className="app-header" style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '0' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{

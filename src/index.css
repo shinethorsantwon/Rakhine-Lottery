@@ -104,8 +104,8 @@ body {
   flex-direction: column;
   flex: 1;
   width: 100%;
-  gap: 20px;
-  /* Increased from 0/default for better spacing */
+  gap: 0;
+  /* Controlled by margins for tighter layout */
 }
 
 .card {
@@ -529,7 +529,7 @@ h3 {
   /* Almost Solid to prevent messy overlap visuals */
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  margin: -12px -12px 10px -12px;
+  margin: -12px -12px 0px -12px;
   padding: 8px 16px 20px 16px;
   border-bottom: 1px solid var(--glass-border);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
