@@ -3,3 +3,15 @@
 [2026-02-05T05:41:33.148Z] Sharp resize successful
 [2026-02-05T05:41:33.202Z] Updating DB with path: uploads/profiles/resized-profileImage-1770270093076-768564419.jpg
 [2026-02-05T05:41:33.255Z] Profile icon updated successfully
+[2026-02-05T14:37:29.437Z] [AUTH] JWT Verification failed: jwt malformed for token fake_token...
+[2026-02-05T14:41:11.060Z] [LOGIN] Attempt for email: test@example.com
+[2026-02-05T14:41:11.119Z] [LOGIN] User not found: test@example.com
+[2026-02-05T14:41:32.088Z] [LOGIN] Attempt for email: test@example.com
+[2026-02-05T14:41:32.142Z] [LOGIN] User not found: test@example.com
+[2026-02-05T14:44:59.061Z] [LOGIN] Attempt for email: chinebuchay@gmail.com
+[2026-02-05T14:44:59.196Z] [LOGIN] Success: chinebuchay@gmail.com (ID: 2)
+[2026-02-05T14:46:00.846Z] Processing icon: C:\Users\bnaco\Desktop\Shine Bu Chay Application\Rakhine Lottery\server\uploads\profiles\profileImage-1770302760814-38766586.jpg -> C:\Users\bnaco\Desktop\Shine Bu Chay Application\Rakhine Lottery\server\uploads\profiles\resized-profileImage-1770302760814-38766586.jpg
+[2026-02-05T14:46:00.847Z] Attempting sharp resize...
+[2026-02-05T14:46:00.929Z] Sharp resize successful
+[2026-02-05T14:46:00.985Z] Updating DB with path: uploads/profiles/resized-profileImage-1770302760814-38766586.jpg
+[2026-02-05T14:46:01.040Z] Profile icon updated successfully

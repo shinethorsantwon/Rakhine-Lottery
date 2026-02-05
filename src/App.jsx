@@ -276,6 +276,9 @@ function App() {
         const data = await response.json();
         setMyTickets(data);
         setUserTickets(data.length);
+      } else if (response.status === 401 || response.status === 403) {
+        console.warn('Session invalid (MyTickets), logging out...');
+        handleLogout();
       }
     } catch (error) {
       console.error('Error fetching tickets:', error);
@@ -296,6 +299,9 @@ function App() {
         const updatedUser = { ...JSON.parse(localStorage.getItem('user')), ...data };
         setUser(updatedUser);
         localStorage.setItem('user', JSON.stringify(updatedUser));
+      } else if (response.status === 401 || response.status === 403) {
+        console.warn('Session invalid (Profile), logging out...');
+        handleLogout();
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -461,14 +467,17 @@ function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    console.log('[App] Performing logout and clearing session...');
+    localStorage.clear(); // Clear EVERYTHING to be sure
     setUser(null);
     setBalance(0);
     setUserTickets(0);
     setWonBalance(0);
+    setMyTickets([]);
     setShowAdmin(false);
     setShowSettings(false);
+    // Optionally force a reload to kill any pending intervals or state
+    // window.location.reload(); 
   };
 
   const currentTotalAmount = totalTicketsSold * ticketPrice;

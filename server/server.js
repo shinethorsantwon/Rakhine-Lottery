@@ -60,21 +60,25 @@ const upload = multer({
     }
 });
 
-const db = mysql.createConnection({
+const db = mysql.createPool({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASS,
-    database: process.env.DB_NAME
+    database: process.env.DB_NAME,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
 });
 
 let dbConnected = false;
 
-db.connect(err => {
+db.getConnection((err, connection) => {
     if (err) {
-        console.error('Error connecting to MySQL:', err);
+        console.error('Error connecting to MySQL Pool:', err);
         return;
     }
-    console.log('Connected to MySQL Database');
+    console.log('Connected to MySQL Database via Pool');
+    connection.release();
 
     // Create users table if not exists
     const createUsersTable = `
@@ -195,17 +199,37 @@ db.connect(err => {
 
 // Middleware to authenticate JWT
 const authenticateToken = (req, res, next) => {
+    const log = (msg) => {
+        try { fs.appendFileSync(path.join(__dirname, 'debug.txt'), `[${new Date().toISOString()}] ${msg}\n`); } catch (e) { }
+    };
+
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
-    if (!token) return res.sendStatus(401);
+    if (!token) {
+        log(`[AUTH] No token provided for ${req.url}`);
+        return res.sendStatus(401);
+    }
 
     jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-        if (err) return res.sendStatus(403);
+        if (err) {
+            log(`[AUTH] JWT Verification failed: ${err.message} for token ${token.substring(0, 15)}...`);
+            console.warn(`[AUTH] JWT Verification failed: ${err.message}`);
+            return res.sendStatus(403);
+        }
 
         // Get full user row to have the latest role
         db.query('SELECT id, role, displayName, username FROM users WHERE id = ?', [decoded.id], (err, results) => {
-            if (err || results.length === 0) return res.sendStatus(403);
+            if (err) {
+                log(`[AUTH] Database error in authenticateToken for User ID ${decoded.id}: ${err.message}`);
+                console.error(`[AUTH] Database error in authenticateToken for User ID ${decoded.id}:`, err.message);
+                return res.status(500).json({ message: 'Internal server error during authentication' });
+            }
+            if (results.length === 0) {
+                log(`[AUTH] User ID ${decoded.id} from token not found in database`);
+                console.warn(`[AUTH] User ID ${decoded.id} from token not found in database`);
+                return res.sendStatus(403);
+            }
             req.user = results[0];
             next();
         });
@@ -223,14 +247,14 @@ const isAdmin = (req, res, next) => {
 
 // Debug Route for Database Connection (Placed here to avoid checkDB middleware blocking it)
 app.get('/api/debug-db', (req, res) => {
-    const tempDb = mysql.createConnection({
+    const tempDb = mysql.createPool({
         host: process.env.DB_HOST,
         user: process.env.DB_USER,
         password: process.env.DB_PASS,
         database: process.env.DB_NAME
     });
 
-    tempDb.connect(err => {
+    tempDb.getConnection((err, connection) => {
         if (err) {
             return res.status(500).json({
                 status: 'Error',
@@ -244,6 +268,7 @@ app.get('/api/debug-db', (req, res) => {
             });
         }
         res.json({ status: 'Success', message: 'Connected to Database successfully!' });
+        connection.release();
         tempDb.end();
     });
 });
@@ -291,18 +316,34 @@ app.post('/api/signup', checkDB, async (req, res) => {
 // Login Route
 app.post('/api/login', checkDB, (req, res) => {
     const { email, password } = req.body;
+    const log = (msg) => {
+        console.log(`[STDOUT_LOG] ${msg}`);
+        try { fs.appendFileSync(path.join(__dirname, 'debug.txt'), `[${new Date().toISOString()}] ${msg}\n`); } catch (e) { }
+    };
+
+    log(`[LOGIN] Attempt for email: ${email}`);
 
     const query = 'SELECT * FROM users WHERE email = ?';
     db.query(query, [email], async (err, results) => {
-        if (err) return res.status(500).json({ message: 'Database error' });
-        if (results.length === 0) return res.status(400).json({ message: 'User not found' });
+        if (err) {
+            log(`[LOGIN] DB Error: ${err.message}`);
+            return res.status(500).json({ message: 'Database error' });
+        }
+        if (results.length === 0) {
+            log(`[LOGIN] User not found: ${email}`);
+            return res.status(400).json({ message: 'User not found' });
+        }
 
         const user = results[0];
         const isMatch = await bcrypt.compare(password, user.password);
 
-        if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
+        if (!isMatch) {
+            log(`[LOGIN] Invalid credentials for: ${email}`);
+            return res.status(400).json({ message: 'Invalid credentials' });
+        }
 
         const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '1d' });
+        log(`[LOGIN] Success: ${email} (ID: ${user.id})`);
 
         res.json({
             token,
@@ -458,35 +499,55 @@ app.post('/api/buy-tickets-bulk', checkDB, authenticateToken, (req, res) => {
                 newWon -= remainingCost;
             }
 
-            db.beginTransaction((err) => {
-                if (err) return res.status(500).json({ message: 'Transaction error' });
+            db.getConnection((err, connection) => {
+                if (err) return res.status(500).json({ message: 'Database connection error' });
 
-                db.query('UPDATE users SET balance = ?, wonBalance = ?, ticketsOwned = ticketsOwned + ? WHERE id = ?', [newBalance, newWon, quantity, userId], (err) => {
-                    if (err) return db.rollback(() => res.status(500).json({ message: 'DB error' }));
+                connection.beginTransaction((err) => {
+                    if (err) {
+                        connection.release();
+                        return res.status(500).json({ message: 'Transaction error' });
+                    }
 
-                    // Bulk insert tickets to get serial numbers
-                    const ticketValues = Array(parseInt(quantity)).fill([userId]);
-                    db.query('INSERT INTO tickets (userId) VALUES ?', [ticketValues], (err, result) => {
-                        if (err) return db.rollback(() => res.status(500).json({ message: 'Ticket generation error' }));
+                    connection.query('UPDATE users SET balance = ?, wonBalance = ?, ticketsOwned = ticketsOwned + ? WHERE id = ?', [newBalance, newWon, quantity, userId], (err) => {
+                        if (err) return connection.rollback(() => {
+                            connection.release();
+                            res.status(500).json({ message: 'DB error' });
+                        });
 
-                        // Update global stats
-                        db.query('UPDATE lottery_stats SET totalSold = totalSold + ? WHERE id = 1', [quantity], (err) => {
-                            if (err) return db.rollback(() => res.status(500).json({ message: 'Stats error' }));
+                        // Bulk insert tickets to get serial numbers
+                        const ticketValues = Array(parseInt(quantity)).fill([userId]);
+                        connection.query('INSERT INTO tickets (userId) VALUES ?', [ticketValues], (err, result) => {
+                            if (err) return connection.rollback(() => {
+                                connection.release();
+                                res.status(500).json({ message: 'Ticket generation error' });
+                            });
 
-                            db.commit((err) => {
-                                if (err) return db.rollback(() => res.status(500).json({ message: 'Commit error' }));
+                            // Update global stats
+                            connection.query('UPDATE lottery_stats SET totalSold = totalSold + ? WHERE id = 1', [quantity], (err) => {
+                                if (err) return connection.rollback(() => {
+                                    connection.release();
+                                    res.status(500).json({ message: 'Stats error' });
+                                });
 
-                                // Get fresh data
-                                db.query('SELECT totalSold FROM lottery_stats WHERE id = 1', (err, stats) => {
-                                    db.query('SELECT balance, wonBalance FROM users WHERE id = ?', [userId], (err, userRes) => {
-                                        res.json({
-                                            message: 'Purchase successful',
-                                            totalSold: stats[0].totalSold,
-                                            balance: userRes[0].balance,
-                                            wonBalance: userRes[0].wonBalance,
-                                            ticketCount: quantity,
-                                            firstSerial: result.insertId,
-                                            lastSerial: result.insertId + parseInt(quantity) - 1
+                                connection.commit((err) => {
+                                    if (err) return connection.rollback(() => {
+                                        connection.release();
+                                        res.status(500).json({ message: 'Commit error' });
+                                    });
+
+                                    connection.release();
+                                    // Get fresh data (using db.query is fine here as it's after the transaction)
+                                    db.query('SELECT totalSold FROM lottery_stats WHERE id = 1', (err, stats) => {
+                                        db.query('SELECT balance, wonBalance FROM users WHERE id = ?', [userId], (err, userRes) => {
+                                            res.json({
+                                                message: 'Purchase successful',
+                                                totalSold: stats[0].totalSold,
+                                                balance: userRes[0].balance,
+                                                wonBalance: userRes[0].wonBalance,
+                                                ticketCount: quantity,
+                                                firstSerial: result.insertId,
+                                                lastSerial: result.insertId + parseInt(quantity) - 1
+                                            });
                                         });
                                     });
                                 });
@@ -531,73 +592,101 @@ app.post('/api/admin/action-transaction', checkDB, authenticateToken, isAdmin, (
         const tx = results[0];
         if (tx.status !== 'pending') return res.status(400).json({ message: 'Transaction already processed' });
 
-        db.beginTransaction((err) => {
-            if (err) return res.status(500).json({ message: 'Transaction error' });
+        db.getConnection((err, connection) => {
+            if (err) return res.status(500).json({ message: 'Database connection error' });
 
-            if (action === 'approved') {
-                const finalAmount = req.body.adjustedAmount ? parseFloat(req.body.adjustedAmount) : parseFloat(tx.amount);
-
-                // If amount changed, update transaction record first
-                if (Math.abs(finalAmount - parseFloat(tx.amount)) > 0.01) {
-                    db.query('UPDATE transactions SET amount = ? WHERE id = ?', [finalAmount, txId], (err) => {
-                        if (err) return db.rollback(() => res.status(500).json({ message: 'Amount update error' }));
-                        processBalance(finalAmount);
-                    });
-                } else {
-                    processBalance(finalAmount);
+            connection.beginTransaction((err) => {
+                if (err) {
+                    connection.release();
+                    return res.status(500).json({ message: 'Transaction error' });
                 }
 
-                function processBalance(amt) {
-                    if (tx.type === 'deposit') {
-                        db.query('UPDATE users SET balance = balance + ? WHERE id = ?', [amt, tx.userId], (err) => {
-                            updateStatus(err);
+                if (action === 'approved') {
+                    const finalAmount = req.body.adjustedAmount ? parseFloat(req.body.adjustedAmount) : parseFloat(tx.amount);
+
+                    // If amount changed, update transaction record first
+                    if (Math.abs(finalAmount - parseFloat(tx.amount)) > 0.01) {
+                        connection.query('UPDATE transactions SET amount = ? WHERE id = ?', [finalAmount, txId], (err) => {
+                            if (err) return connection.rollback(() => {
+                                connection.release();
+                                res.status(500).json({ message: 'Amount update error' });
+                            });
+                            processBalance(finalAmount);
                         });
                     } else {
-                        // Withdrawal Logic (Keep original logic but use amt if we want to support partial withdrawal approval later)
-                        // For now, assuming Full Withdrawal approval only to keep logic safe
-                        db.query('SELECT balance, wonBalance FROM users WHERE id = ?', [tx.userId], (err, uRes) => {
-                            if (err || uRes.length === 0) return db.rollback(() => res.status(500).json({ message: 'User error' }));
+                        processBalance(finalAmount);
+                    }
 
-                            const user = uRes[0];
-                            let remaining = amt; // Use the approved amount
-                            let newWon = parseFloat(user.wonBalance);
-                            let newBal = parseFloat(user.balance);
-
-                            if (newWon >= remaining) {
-                                newWon -= remaining;
-                                remaining = 0;
-                            } else {
-                                remaining -= newWon;
-                                newWon = 0;
-                                newBal -= remaining;
-                            }
-
-                            db.query('UPDATE users SET balance = ?, wonBalance = ? WHERE id = ?', [newBal, newWon, tx.userId], (err) => {
+                    function processBalance(amt) {
+                        if (tx.type === 'deposit') {
+                            connection.query('UPDATE users SET balance = balance + ? WHERE id = ?', [amt, tx.userId], (err) => {
                                 updateStatus(err);
+                            });
+                        } else {
+                            connection.query('SELECT balance, wonBalance FROM users WHERE id = ?', [tx.userId], (err, uRes) => {
+                                if (err || uRes.length === 0) return connection.rollback(() => {
+                                    connection.release();
+                                    res.status(500).json({ message: 'User error' });
+                                });
+
+                                const user = uRes[0];
+                                let remaining = amt;
+                                let newWon = parseFloat(user.wonBalance);
+                                let newBal = parseFloat(user.balance);
+
+                                if (newWon >= remaining) {
+                                    newWon -= remaining;
+                                    remaining = 0;
+                                } else {
+                                    remaining -= newWon;
+                                    newWon = 0;
+                                    newBal -= remaining;
+                                }
+
+                                connection.query('UPDATE users SET balance = ?, wonBalance = ? WHERE id = ?', [newBal, newWon, tx.userId], (err) => {
+                                    updateStatus(err);
+                                });
+                            });
+                        }
+                    }
+
+                    function updateStatus(err) {
+                        if (err) return connection.rollback(() => {
+                            connection.release();
+                            res.status(500).json({ message: 'User update error' });
+                        });
+                        connection.query('UPDATE transactions SET status = ? WHERE id = ?', [action, txId], (err) => {
+                            if (err) return connection.rollback(() => {
+                                connection.release();
+                                res.status(500).json({ message: 'Status update failed' });
+                            });
+                            connection.commit((err) => {
+                                if (err) return connection.rollback(() => {
+                                    connection.release();
+                                    res.status(500).json({ message: 'Commit error' });
+                                });
+                                connection.release();
+                                res.json({ message: `Transaction ${action}` });
                             });
                         });
                     }
-                }
-
-                function updateStatus(err) {
-                    if (err) return db.rollback(() => res.status(500).json({ message: 'User update error' }));
-                    db.query('UPDATE transactions SET status = ? WHERE id = ?', [action, txId], (err) => {
-                        if (err) return db.rollback(() => res.status(500).json({ message: 'Status update failed' }));
-                        db.commit((err) => {
-                            if (err) return db.rollback(() => res.status(500).json({ message: 'Commit error' }));
+                } else { // action is 'rejected'
+                    connection.query('UPDATE transactions SET status = ? WHERE id = ?', [action, txId], (err) => {
+                        if (err) return connection.rollback(() => {
+                            connection.release();
+                            res.status(500).json({ message: 'Status update failed' });
+                        });
+                        connection.commit((err) => {
+                            if (err) return connection.rollback(() => {
+                                connection.release();
+                                res.status(500).json({ message: 'Commit error' });
+                            });
+                            connection.release();
                             res.json({ message: `Transaction ${action}` });
                         });
                     });
                 }
-            } else { // action is 'rejected'
-                db.query('UPDATE transactions SET status = ? WHERE id = ?', [action, txId], (err) => {
-                    if (err) return db.rollback(() => res.status(500).json({ message: 'Status update failed' }));
-                    db.commit((err) => {
-                        if (err) return db.rollback(() => res.status(500).json({ message: 'Commit error' }));
-                        res.json({ message: `Transaction ${action}` });
-                    });
-                });
-            }
+            });
         });
     });
 });
@@ -736,59 +825,85 @@ app.post('/api/admin/draw-winner', checkDB, authenticateToken, isAdmin, (req, re
                 });
 
                 // 3. Update balances and stats
-                db.beginTransaction((err) => {
-                    if (err) return res.status(500).json({ message: 'Transaction error' });
+                db.getConnection((err, connection) => {
+                    if (err) return res.status(500).json({ message: 'Database connection error' });
 
-                    // A. Credit Admin (Commission)
-                    db.query('UPDATE users SET commissionBalance = commissionBalance + ? WHERE id = 1', [adminFee], (err) => {
-                        if (err) return db.rollback(() => res.status(500).json({ message: 'Admin fee error' }));
+                    connection.beginTransaction((err) => {
+                        if (err) {
+                            connection.release();
+                            return res.status(500).json({ message: 'Transaction error' });
+                        }
 
-                        // B. Credit Winners (Loop)
-                        const creditPromises = winningDetails.map(w => {
-                            return new Promise((resolve, reject) => {
-                                db.query('UPDATE users SET wonBalance = wonBalance + ? WHERE id = ?', [w.prize, w.userId], (err) => {
-                                    if (err) reject(err);
-                                    else resolve();
+                        // A. Credit Admin (Commission)
+                        connection.query('UPDATE users SET commissionBalance = commissionBalance + ? WHERE id = ?', [adminFee, req.user.id], (err) => {
+                            if (err) return connection.rollback(() => {
+                                connection.release();
+                                res.status(500).json({ message: 'Admin fee error' });
+                            });
+
+                            // B. Credit Winners (Loop)
+                            const creditPromises = winningDetails.map(w => {
+                                return new Promise((resolve, reject) => {
+                                    connection.query('UPDATE users SET wonBalance = wonBalance + ? WHERE id = ?', [w.prize, w.userId], (err) => {
+                                        if (err) reject(err);
+                                        else resolve();
+                                    });
                                 });
                             });
-                        });
 
-                        Promise.all(creditPromises).then(() => {
-                            // C. Update Global Stats
-                            const w1 = winningDetails[0];
-                            const w2 = winningDetails[1] || { name: null, ticketId: null };
-                            const w3 = winningDetails[2] || { name: null, ticketId: null };
+                            Promise.all(creditPromises).then(() => {
+                                // C. Update Global Stats
+                                const w1 = winningDetails[0];
+                                const w2 = winningDetails[1] || { name: null, ticketId: null };
+                                const w3 = winningDetails[2] || { name: null, ticketId: null };
 
-                            db.query(`UPDATE lottery_stats SET 
-                                totalSold = 0, 
-                                lastWinnerName = ?, lastWinningTicketId = ?, lastWinnerPrize = ?,
-                                lastWinnerName2 = ?, lastWinningTicketId2 = ?, lastWinnerPrize2 = ?,
-                                lastWinnerName3 = ?, lastWinningTicketId3 = ?, lastWinnerPrize3 = ?
-                                WHERE id = 1`,
-                                [w1.name, w1.ticketId, w1.prize, w2.name, w2.ticketId, w2.prize, w3.name, w3.ticketId, w3.prize],
-                                (err) => {
-                                    if (err) return db.rollback(() => res.status(500).json({ message: 'Stats reset error' }));
+                                connection.query(`UPDATE lottery_stats SET 
+                                    totalSold = 0, 
+                                    lastWinnerName = ?, lastWinningTicketId = ?, lastWinnerPrize = ?,
+                                    lastWinnerName2 = ?, lastWinningTicketId2 = ?, lastWinnerPrize2 = ?,
+                                    lastWinnerName3 = ?, lastWinningTicketId3 = ?, lastWinnerPrize3 = ?
+                                    WHERE id = 1`,
+                                    [w1.name, w1.ticketId, w1.prize, w2.name, w2.ticketId, w2.prize, w3.name, w3.ticketId, w3.prize],
+                                    (err) => {
+                                        if (err) return connection.rollback(() => {
+                                            connection.release();
+                                            res.status(500).json({ message: 'Stats reset error' });
+                                        });
 
-                                    // D. Reset Tickets
-                                    db.query('TRUNCATE TABLE tickets', (err) => {
-                                        if (err) return db.rollback(() => res.status(500).json({ message: 'Tickets clear error' }));
+                                        // D. Reset Tickets
+                                        connection.query('TRUNCATE TABLE tickets', (err) => {
+                                            if (err) return connection.rollback(() => {
+                                                connection.release();
+                                                res.status(500).json({ message: 'Tickets clear error' });
+                                            });
 
-                                        // E. Reset User Ticket Counts
-                                        db.query('UPDATE users SET ticketsOwned = 0', (err) => {
-                                            if (err) return db.rollback(() => res.status(500).json({ message: 'User tickets reset error' }));
+                                            // E. Reset User Ticket Counts
+                                            connection.query('UPDATE users SET ticketsOwned = 0', (err) => {
+                                                if (err) return connection.rollback(() => {
+                                                    connection.release();
+                                                    res.status(500).json({ message: 'User tickets reset error' });
+                                                });
 
-                                            db.commit((err) => {
-                                                if (err) return db.rollback(() => res.status(500).json({ message: 'Commit error' }));
-                                                res.json({
-                                                    message: 'Winners drawn successfully!',
-                                                    winners: winningDetails
+                                                connection.commit((err) => {
+                                                    if (err) return connection.rollback(() => {
+                                                        connection.release();
+                                                        res.status(500).json({ message: 'Commit error' });
+                                                    });
+                                                    connection.release();
+                                                    res.json({
+                                                        message: 'Winners drawn successfully!',
+                                                        winners: winningDetails
+                                                    });
                                                 });
                                             });
                                         });
                                     });
+                            }).catch((err) => {
+                                connection.rollback(() => {
+                                    connection.release();
+                                    res.status(500).json({ message: 'Awarding error: ' + err.message });
                                 });
-                        }).catch(() => {
-                            db.rollback(() => res.status(500).json({ message: 'Awarding error' }));
+                            });
                         });
                     });
                 });
@@ -923,15 +1038,26 @@ setInterval(() => {
 app.post('/api/admin/claim-commission', authenticateToken, (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ message: 'Admin only' });
 
-    db.query('SELECT commissionBalance FROM users WHERE id = ?', [req.user.id], (err, results) => {
-        if (err || !results.length) return res.status(500).json({ message: 'Error' });
-        const commission = results[0].commissionBalance;
+    db.getConnection((err, connection) => {
+        if (err) return res.status(500).json({ message: 'Database connection error' });
 
-        if (commission <= 0) return res.status(400).json({ message: 'No commission to claim' });
+        connection.query('SELECT commissionBalance FROM users WHERE id = ?', [req.user.id], (err, results) => {
+            if (err || !results.length) {
+                connection.release();
+                return res.status(500).json({ message: 'Error' });
+            }
+            const commission = results[0].commissionBalance;
 
-        db.query('UPDATE users SET balance = balance + ?, commissionBalance = 0 WHERE id = ?', [commission, req.user.id], (err) => {
-            if (err) return res.status(500).json({ message: 'Transfer failed' });
-            res.json({ message: 'Commission transferred to main balance', claimed: commission });
+            if (commission <= 0) {
+                connection.release();
+                return res.status(400).json({ message: 'No commission to claim' });
+            }
+
+            connection.query('UPDATE users SET balance = balance + ?, commissionBalance = 0 WHERE id = ?', [commission, req.user.id], (err) => {
+                connection.release();
+                if (err) return res.status(500).json({ message: 'Transfer failed' });
+                res.json({ message: 'Commission transferred to main balance', claimed: commission });
+            });
         });
     });
 });
