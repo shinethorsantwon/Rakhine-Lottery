@@ -478,6 +478,16 @@ function AdminPanel({ onBack }) {
                                     "{selectedTx.note}"
                                 </p>
                             )}
+                            {selectedTx.proofImage && (
+                                <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '12px' }}>
+                                    <div style={{ fontSize: '0.75rem', opacity: 0.7, marginBottom: '6px' }}>Payment Proof:</div>
+                                    <img
+                                        src={`${API_URL}/${selectedTx.proofImage.replace(/\\/g, '/').replace(/^server\//, '')}`}
+                                        alt="Proof"
+                                        style={{ width: '100%', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)' }}
+                                    />
+                                </div>
+                            )}
                         </div>
 
                         <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '8px', fontWeight: 'bold' }}>Confirm Amount (MMK)</label>

@@ -24,8 +24,10 @@ app.use(express.static(path.join(__dirname, 'public'))); // Serve Frontend
 // Ensure upload directories exist
 const uploadDirs = ['uploads', 'uploads/profiles', 'uploads/proofs'];
 uploadDirs.forEach(dir => {
-    if (!fs.existsSync(path.join(__dirname, dir))) {
-        fs.mkdirSync(path.join(__dirname, dir), { recursive: true });
+    const dirPath = path.join(__dirname, dir);
+    if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+        console.log(`Created directory: ${dirPath}`);
     }
 });
 
