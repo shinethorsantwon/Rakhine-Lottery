@@ -263,9 +263,10 @@ app.post('/api/signup', checkDB, async (req, res) => {
     const { displayName, email, phone, password } = req.body;
     let { username } = req.body;
 
-    // Auto-generate username if not provided
+    // Auto-generate username from displayName
     if (!username) {
-        username = `user_${Math.floor(100000 + Math.random() * 900000)}`;
+        const baseName = displayName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10);
+        username = `${baseName}${Math.floor(100 + Math.random() * 899)}`;
     }
 
     try {
