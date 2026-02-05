@@ -35,7 +35,7 @@ const deploy = async () => {
     client.ftp.verbose = true;
 
     try {
-        console.log('🚀 Starting Deployment...');
+        console.log('🚀 Starting Deployment (Frontend Only)...');
 
         // 1. Build Frontend
         console.log('📦 Building Frontend...');
@@ -53,24 +53,9 @@ const deploy = async () => {
 
         console.log('✅ Connected!');
 
-        // 3. Upload Frontend (dist folder contents -> root/public)
-        console.log('📤 Uploading Frontend...');
-        const remotePublicDir = `${config.remoteRoot}/public`;
-        await client.ensureDir(remotePublicDir);
-        await client.uploadFromDir("dist", remotePublicDir);
-
-        // 4. Upload Server (to root/public_html)
-        console.log('📤 Uploading Backend...');
-
-        // Upload individual server files to ROOT
-        await client.uploadFrom("server/server.js", `${config.remoteRoot}/server.js`);
-        await client.uploadFrom("package.json", `${config.remoteRoot}/package.json`);
-        await client.uploadFrom(".env.production", `${config.remoteRoot}/.env`);
-
-        // Ensure uploads directory exists
-        await client.ensureDir(`${config.remoteRoot}/uploads`);
-        await client.ensureDir(`${config.remoteRoot}/uploads/profiles`);
-        await client.ensureDir(`${config.remoteRoot}/uploads/proofs`);
+        // 3. Upload Frontend (dist folder contents -> root/public_html)
+        console.log('📤 Uploading Frontend to public_html...');
+        await client.uploadFromDir("dist", config.remoteRoot);
 
         console.log('🎉 Deployment Complete!');
 
