@@ -143,10 +143,20 @@ db.connect(err => {
     db.query(createTransactionsTable, (err) => {
         if (err) console.error('Error creating transactions table:', err);
         else {
-            db.query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS method VARCHAR(50) DEFAULT 'manual'");
-            db.query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS note TEXT");
-            db.query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS proofImage VARCHAR(255)");
-            console.log('Transactions table ready with method, note, and proofImage columns');
+            // Safer column additions
+            const addCols = [
+                "ALTER TABLE transactions ADD COLUMN method VARCHAR(50) DEFAULT 'manual'",
+                "ALTER TABLE transactions ADD COLUMN note TEXT",
+                "ALTER TABLE transactions ADD COLUMN proofImage VARCHAR(255)"
+            ];
+            addCols.forEach(q => {
+                db.query(q, (err) => {
+                    if (err && err.code !== 'ER_DUP_COLUMN_NAMES' && err.errno !== 1060) {
+                        console.error(`Error adding column: ${q}`, err.message);
+                    }
+                });
+            });
+            console.log('Transactions table checked/updated');
         }
     });
 
@@ -629,7 +639,15 @@ app.post('/api/request-transaction', checkDB, authenticateToken, upload.single('
     function insertTransaction() {
         const query = 'INSERT INTO transactions (userId, type, amount, status, method, note, proofImage) VALUES (?, ?, ?, "pending", ?, ?, ?)';
         db.query(query, [userId, type, amount, method, finalNote, proofImage], (err) => {
-            if (err) return res.status(500).json({ message: 'Transaction request failed', error: err });
+            if (err) {
+                console.error('Transaction insertion error:', err);
+                return res.status(500).json({
+                    message: 'Transaction request failed',
+                    error: err.message,
+                    sql: query,
+                    data: [userId, type, amount, method, finalNote, proofImage]
+                });
+            }
             res.json({ message: 'Transaction submitted successfully' });
         });
     }
