@@ -529,7 +529,7 @@ h3 {
   /* Almost Solid to prevent messy overlap visuals */
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  margin: -12px -12px 24px -12px;
+  margin: -12px -12px 10px -12px;
   padding: 8px 16px 20px 16px;
   border-bottom: 1px solid var(--glass-border);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
