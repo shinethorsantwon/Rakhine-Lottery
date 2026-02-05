@@ -481,7 +481,7 @@ function App() {
   return (
     <div className="container">
       {user && (
-        <header className="app-header" style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '0' }}>
+        <header className="app-header" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{
@@ -612,7 +612,7 @@ function App() {
             )}
           </div>
           {user && (
-            <div style={{ marginTop: '0', marginBottom: '24px' }}>
+            <div style={{ marginTop: '20px', marginBottom: '24px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', justifyContent: 'center' }}>
                 <Icons.Ticket />
                 <span style={{ color: 'white', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '2px', fontWeight: '700' }}>My Collection</span>

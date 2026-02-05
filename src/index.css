@@ -530,7 +530,7 @@ h3 {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   margin: -12px -12px 0px -12px;
-  padding: 8px 16px 4px 16px;
+  padding: 8px 16px 20px 16px;
   border-bottom: 1px solid var(--glass-border);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   padding-top: calc(env(safe-area-inset-top) + 15px);
@@ -539,11 +539,10 @@ h3 {
 }
 
 .sticky-stack {
-  position: sticky;
-  top: 365px;
+  top: 240px;
   /* Moved lower to prevent header overlap */
   z-index: 100;
-  margin-top: -10px;
+  margin-top: 20px !important;
 }
 
 .sticky-stack .card {
