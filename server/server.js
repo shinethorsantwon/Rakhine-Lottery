@@ -209,6 +209,33 @@ const isAdmin = (req, res, next) => {
     }
 };
 
+// Debug Route for Database Connection (Placed here to avoid checkDB middleware blocking it)
+app.get('/api/debug-db', (req, res) => {
+    const tempDb = mysql.createConnection({
+        host: process.env.DB_HOST,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASS,
+        database: process.env.DB_NAME
+    });
+
+    tempDb.connect(err => {
+        if (err) {
+            return res.status(500).json({
+                status: 'Error',
+                message: err.message,
+                code: err.code,
+                config: {
+                    host: process.env.DB_HOST,
+                    user: process.env.DB_USER,
+                    database: process.env.DB_NAME
+                }
+            });
+        }
+        res.json({ status: 'Success', message: 'Connected to Database successfully!' });
+        tempDb.end();
+    });
+});
+
 // Middleware to check DB connection
 const checkDB = (req, res, next) => {
     console.log(`Checking DB connection for ${req.url}...`, { dbConnected });
