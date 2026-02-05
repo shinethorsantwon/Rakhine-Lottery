@@ -341,7 +341,7 @@ function AdminPanel({ onBack }) {
                                     <div style={{ fontSize: '0.7rem', opacity: 0.5 }}>{new Date(tx.createdAt).toLocaleString()}</div>
                                     {tx.proofImage && (
                                         <a
-                                            href={`${API_URL}/${tx.proofImage.replace(/\\/g, '/').replace(/^server\//, '')}`}
+                                            href={`${API_URL}/uploads/${tx.proofImage.replace(/\\/g, '/').split('/uploads/')[1] || tx.proofImage.split('uploads')[1] || tx.proofImage}`}
                                             target="_blank"
                                             rel="noreferrer"
                                             onClick={e => e.stopPropagation()}
@@ -482,9 +482,9 @@ function AdminPanel({ onBack }) {
                                 <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '12px' }}>
                                     <div style={{ fontSize: '0.75rem', opacity: 0.7, marginBottom: '6px' }}>Payment Proof:</div>
                                     <img
-                                        src={`${API_URL}/${selectedTx.proofImage.replace(/\\/g, '/').replace(/^server\//, '')}`}
+                                        src={`${API_URL}/uploads/${selectedTx.proofImage.replace(/\\/g, '/').split('/uploads/')[1] || selectedTx.proofImage.split('uploads')[1] || selectedTx.proofImage}`}
                                         alt="Proof"
-                                        style={{ width: '100%', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)' }}
+                                        style={{ width: '100%', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.2)', marginTop: '8px' }}
                                     />
                                 </div>
                             )}
