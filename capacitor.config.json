@@ -1,0 +1,12 @@
+{
+  "appId": "com.rakhine.lottery",
+  "appName": "Rakhine Lottery",
+  "webDir": "dist",
+  "server": {
+    "url": "http://localhost:5173",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

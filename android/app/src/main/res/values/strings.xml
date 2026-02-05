@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Rakhine Lottery</string>
+    <string name="title_activity_main">Rakhine Lottery</string>
+    <string name="package_name">com.rakhine.lottery</string>
+    <string name="custom_url_scheme">com.rakhine.lottery</string>
+</resources>
